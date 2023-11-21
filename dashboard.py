@@ -3,50 +3,58 @@ import pandas as pd
 import plotly.express as px
 import calendar
 
-st.title("Dashboard afluencia de clientes - Cafe internet ")
+st.title("Dashboard Afluencia de Clientes - Café Internet")
 
-# Leer datos
+# Leer los datos
 dfCafe = pd.read_excel("datos/resultadoslimpieza.xlsx")
 
-# Filtro
-selected_year = st.selectbox('Selecciona el año:', sorted(dfCafe['fechaEntrada'].dt.year.unique()))
-selected_month = st.selectbox('Selecciona el mes:', sorted(dfCafe['Month'].unique()))
+meses_dict = {
+    1: "Enero", 2: "Febrero", 3: "Marzo", 4: "Abril", 5: "Mayo", 6: "Junio",
+    7: "Julio", 8: "Agosto", 9: "Septiembre", 10: "Octubre", 11: "Noviembre", 12: "Diciembre"
+}
 
-# se aplica
-df_selected = dfCafe[(dfCafe['fechaEntrada'].dt.year == selected_year) & (dfCafe['Month'] == selected_month)]
+meses = [meses_dict[m] for m in sorted(set(dfCafe["fechaEntrada"].dt.month))]
+anios = list(set(dfCafe["fechaEntrada"].dt.year))
 
-# Mostrar el df
-st.subheader(f'Datos para {calendar.month_name[int(selected_month)]} del {selected_year}')
-st.write(df_selected)
+# Sidebar para selección de año y mes
+anioSeleccionado = st.sidebar.selectbox('Seleccionar año', anios)
+mesSeleccionado = st.sidebar.selectbox('Seleccionar mes', meses)
 
-# Gráfica de año
-df_compare = dfCafe[dfCafe['fechaEntrada'].dt.year == selected_year].groupby('Month').size().reset_index(name='Number of Clients')
-fig_compare = px.bar(df_compare, x='Month', y='Number of Clients',
-                     labels={'Month': 'Mes', 'Number of Clients': 'Número de Clientes'},
-                     title=f'Comparación mes a mes de {selected_year}')
+# Filtrado de datos según año y mes seleccionados
+dfFiltradoMesanio = dfCafe[
+    (dfCafe['fechaEntrada'].dt.month == list(meses_dict.keys())[list(meses_dict.values()).index(mesSeleccionado)]) &
+    (dfCafe['fechaEntrada'].dt.year == anioSeleccionado)
+]
 
-# Mapear el número del mes a su nombre correspondiente
-fig_compare.update_xaxes(
-    tickmode='array',
-    tickvals=list(range(1, 13)),
-    ticktext=[calendar.month_abbr[i] for i in range(1, 13)]
+# Visualización del df} filtrado
+st.subheader("Datos Filtrados:")
+st.write(dfFiltradoMesanio)
+
+# Gráfica comparativa mes a mes de los dos años
+dfmeses = dfCafe.groupby(pd.Grouper(key="fechaEntrada", freq="1M")).count().reset_index()
+dfmeses['year'] = dfmeses['fechaEntrada'].dt.year
+dfmeses['month'] = dfmeses['fechaEntrada'].dt.strftime('%B')
+dfmeses['year_month'] = dfmeses['year'].astype(str) + '-' + dfmeses['fechaEntrada'].dt.month.astype(str).str.zfill(2)
+dfmeses = dfmeses.sort_values('year_month')
+
+fig_meses = px.bar(
+    dfmeses,
+    x='month',
+    y='horaEntrada',
+    facet_col='year',
+    labels={'horaEntrada': 'Cantidad de Entradas'},
+    title='Entradas Mensuales por Año',
+    text='year',
+    category_orders={'month': ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']}
 )
 
-st.plotly_chart(fig_compare)
+# Gráfica de dias por mes seleccionado
+dfMes = dfFiltradoMesanio.groupby(pd.Grouper(key="fechaEntrada", freq="1D")).count().reset_index()
+dfMes["fechaStr"] = dfMes["fechaEntrada"].astype(str) + " - "
+dfMes["Day"] = dfMes["fechaEntrada"].dt.day_name()+"-"+dfMes["fechaStr"]
 
-# Gráfica de días del mes
-df_selected['fechaEntrada'] = pd.to_datetime(df_selected['fechaEntrada'])
-df_selected_month = df_selected.groupby(df_selected['fechaEntrada'].dt.day).size().reset_index(name='Number of Clients')
+fig_dias = px.bar(dfMes, x='Day', y='horaEntrada', labels={'Dia': 'Numero de Clientes'}, title='Número de Clientes por semana')
 
-# Agregar una columna con el nombre del día
-df_selected_month['Day of Week'] = df_selected['fechaEntrada'].dt.day_name()
-
-fig_days = px.bar(df_selected_month, x='fechaEntrada', y='Number of Clients',
-                  labels={'fechaEntrada': 'Día del Mes', 'Number of Clients': 'Número de Clientes'},
-                  title=f'Afluencia de clientes para {calendar.month_name[int(selected_month)]} del {selected_year}')
-
-# Formato legible en el eje x
-fig_days.update_xaxes(type='category')
-
-st.plotly_chart(fig_days)
-
+# Visualización de las gráficas en el dashboard
+st.plotly_chart(fig_meses, use_container_width=True)
+st.plotly_chart(fig_dias, use_container_width=True)
